@@ -87,20 +87,49 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
 
     # IoU
     iou = inter / union
+    # adding wise IoU from https://blog.csdn.net/qq_55745968/article/details/128888122
+    # Adding Smooth GIoU Loss https://www.mdpi.com/2072-4292/15/5/1259
+    # Combined-IoU
+    # Calculate l2_box 
+    if xywh:
+        wh_box = (b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)), (b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1))
+    else:
+        wh_box = (b1_x2 - b1_x1).maximum(b2_x2 - b2_x1), (b1_y2 - b1_y1).maximum(b2_y2 - b2_y1)
+
+    l2_box = torch.square(wh_box[0]) + torch.square(wh_box[1])
+
+    # Calculate d_center
+    if xywh:
+        pred_xy = (x1 + x2) / 2, (y1 + y2) / 2
+        target_xy = (b1_x1 + b2_x1) / 2, (b1_y1 + b2_y1) / 2
+    else:
+        pred_xy = (b1_x1 + b1_x2) / 2, (b1_y1 + b1_y2) / 2
+        target_xy = (b2_x1 + b2_x2) / 2, (b2_y1 + b2_y2) / 2
+
+    d_center = pred_xy[0] - target_xy[0], pred_xy[1] - target_xy[1]
+
+    # Calculate l2_center
+    l2_center = torch.square(d_center[0]) + torch.square(d_center[1])
+
+    
     if CIoU or DIoU or GIoU:
         cw = b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)  # convex (smallest enclosing box) width
         ch = b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1)  # convex height
         if CIoU or DIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
-            c2 = cw ** 2 + ch ** 2 + eps  # convex diagonal squared
-            rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4  # center dist ** 2
-            if CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
-                v = (4 / math.pi ** 2) * (torch.atan(w2 / h2) - torch.atan(w1 / h1)).pow(2)
-                with torch.no_grad():
-                    alpha = v / (v - iou + (1 + eps))
-                return iou - (rho2 / c2 + v * alpha)  # CIoU
-            return iou - rho2 / c2  # DIoU
+            # c2 = cw ** 2 + ch ** 2 + eps  # convex diagonal squared
+            # rho2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2) ** 2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2) ** 2) / 4  # center dist ** 2
+            # if CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
+            #     v = (4 / math.pi ** 2) * (torch.atan(w2 / h2) - torch.atan(w1 / h1)).pow(2)
+            #     with torch.no_grad():
+            #         alpha = v / (v - iou + (1 + eps))
+            #     return iou - (rho2 / c2 + v * alpha)  # CIoU
+            # return iou - rho2 / c2  # DIoU
+            dist = torch.exp(l2_center / l2_box.detach())
+            scaled_loss = dist * (1 - iou)
+            return scaled_loss
         c_area = cw * ch + eps  # convex area
-        return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
+        return 1 - (c_area - (c_area - union) / c_area)   #Smooth GIoU Loss https://www.mdpi.com/2072-4292/15/5/1259
+        #return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
     return iou  # IoU
 
 

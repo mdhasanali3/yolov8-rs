@@ -88,8 +88,8 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
     # IoU
     iou = inter / union
     
-    
-    # Calculate l2_box
+    # adding wise IoU from https://blog.csdn.net/qq_55745968/article/details/128888122
+    # Calculate l2_box 
     if xywh:
         wh_box = (b1_x2.maximum(b2_x2) - b1_x1.minimum(b2_x1)), (b1_y2.maximum(b2_y2) - b1_y1.minimum(b2_y1))
     else:

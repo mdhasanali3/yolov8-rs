@@ -85,6 +85,7 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
     # Union Area
     union = w1 * h1 + w2 * h2 - inter + eps
 
+    # Adding Smooth GIoU Loss instead of GIoU
     # IoU
     iou = inter / union
     if CIoU or DIoU or GIoU:
@@ -100,7 +101,8 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
                 return iou - (rho2 / c2 + v * alpha)  # CIoU
             return iou - rho2 / c2  # DIoU
         c_area = cw * ch + eps  # convex area
-        return iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
+        return 1 - (c_area - (c_area - union) / c_area)   #Smooth GIoU Loss https://www.mdpi.com/2072-4292/15/5/1259
+    #iou - (c_area - union) / c_area  # GIoU https://arxiv.org/pdf/1902.09630.pdf
     return iou  # IoU
 
 
